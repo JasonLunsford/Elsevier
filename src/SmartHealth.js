@@ -1,7 +1,8 @@
 import React, { Component } from 'react';
 
 import _ from 'lodash';
-import axios from 'axios';
+
+import {getPatient, getConditions} from './services/fhir_service';
 
 import './SmartHealth.css';
 
@@ -10,26 +11,23 @@ export default class SmartHealth extends Component {
         name: '',
         gender: '',
         birthDate: '',
+        conditions: [],
         loading: 0
-    };
-
-    sandboxConfig = {
-        method:  'get',
-        baseURL: 'https://fhir-open.sandboxcerner.com/dstu2/0b8a0111-e8e6-4c26-a91c-5069cbc6b1ca',
-        responseType: 'json+fhir'
     };
 
     handleIdSearch() {
         if (!_.isEmpty(this.idSearch.value)) {
             this.setState({loading: 1});
-            _.delay(() => {
-                this.getPatient(this.idSearch.value).then(patient => {
-                  this.setState({
+            _.delay(async () => {
+                let patient = await getPatient(this.idSearch.value);
+                let conditions = await getConditions(this.idSearch.value);
+
+                this.setState({
                     name: this._extract.name(patient),
                     gender: this._extract.gender(patient),
                     birthDate: this._extract.birthDate(patient),
+                    conditions: conditions.entry,
                     loading: 2
-                  });
                 });
             }, 1500);
         } else {
@@ -37,36 +35,9 @@ export default class SmartHealth extends Component {
                 name: '',
                 gender: '',
                 birthDate: '',
+                conditions: [],
                 loading: 0
             });
-        }
-    }
-
-    async getPatient(id) {
-        let customConfig = {
-            url: 'Patient',
-            params: {
-                _id: id
-            }
-        };
-
-        return await this.callFhirServer(customConfig);
-    }
-
-    async callFhirServer(customConfig) {
-        let result;
-        let config = _.assign({}, this.sandboxConfig, customConfig);
-
-        try {
-            result = await axios(config);
-        } catch (error) {
-            throw error;
-        }
-
-        if (result.status === 200) {
-            return result.data;
-        } else {
-            throw new Error(`Payload failure. Status code: ${result.status}`);
         }
     }
 
@@ -75,34 +46,60 @@ export default class SmartHealth extends Component {
             let given = _.get(result, 'entry[0].resource.name[0].given[0]');
             let family = _.get(result, 'entry[0].resource.name[0].family[0]');
 
-            return `${given} ${family}`;
+            return `${given} ${family}`
         },
         gender: result => {
-            return _.get(result, 'entry[0].resource.gender')
+            return _.get(result, 'entry[0].resource.gender');
         },
         birthDate: result => {
-            return _.get(result, 'entry[0].resource.birthDate')
+            return _.get(result, 'entry[0].resource.birthDate');
         }
     }
 
   render() {
-    let {name, gender, birthDate, loading} = this.state;
+    let {name, gender, birthDate, conditions, loading} = this.state;
+
+    const getMoreInfo = text => {
+        return `https://www.ncbi.nlm.nih.gov/pubmed/?term=${text}`;
+    }
 
     return (
-      <div>
-        <p>Enter patient ID:</p>
-        <p>(example: 4342009)</p>
-        <input ref={input => this.idSearch = input}
-               onChange={e => this.handleIdSearch()}
-        />
-        {loading === 1 && <div>
-            <p>Loading...</p>
-        </div>}
-        {loading === 2 && <div>
-            <p>{name}</p>
-            <p>{gender}</p>
-            <p>{birthDate}</p>
-        </div>}
+      <div className="SmartHealth">
+            <p>Enter patient ID:</p>
+            <p>(example: 4342009)</p>
+            <input ref={input => this.idSearch = input}
+                   onChange={e => this.handleIdSearch()}
+                   className="idSearchInput"
+            />
+            {loading === 1 && <div className="patientInfo">
+                <p>Loading...</p>
+            </div>}
+            {loading === 2 && <div className="patientInfo">
+                <p>{name}</p>
+                <p>{_.startCase(gender)}</p>
+                <p>{birthDate}</p>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th className="narrowCell">Date</th>
+                            <th>Condition</th>
+                            <th className="narrowCell">More Info</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {conditions.map((condition, index) => 
+                        <tr key={index}>
+                            <td className="narrowCell">{condition.resource.dateRecorded}</td>
+                            <td>{condition.resource.code.text}</td>
+                            <td className="narrowCell"><a href={getMoreInfo(condition.resource.code.text)}
+                                   target="_blank">PubMed</a>
+                            </td>
+                        </tr>
+                    )}
+                    </tbody>
+                </table>
+            </div>}
       </div>
     );
   }
