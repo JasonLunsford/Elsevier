@@ -16,7 +16,7 @@ export default class SmartHealth extends Component {
     };
 
     handleIdSearch() {
-        if (!_.isEmpty(this.idSearch.value)) {
+        if (!_.isEmpty(this.idSearch.value) && this.idSearch.value.length >= 7) {
             this.setState({loading: 1});
             _.delay(async () => {
                 let patient = await getPatient(this.idSearch.value);
